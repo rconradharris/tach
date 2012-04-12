@@ -1,7 +1,9 @@
+import datetime
 import logging
 import json
 import socket
 import time
+import traceback
 import urllib
 import urllib2
 
@@ -238,12 +240,16 @@ class WebServiceNotifier(BaseNotifier):
 
     def send(self, body):
         try:
-            cooked_data = urllib.urlencode(body)
+            payload = dict(args=body)
+            cooked_data = urllib.urlencode(payload)
             req = urllib2.Request(self.url, cooked_data)
             response = urllib2.urlopen(req)
             return response.read()
         except Exception, e:
-            LOG.debug("****** EXCEPTION %s" % e)
+            with open("stacktach_notifier.log", "w+") as log:
+                print >>log, "--------"
+                print >>log, e
+                print >>log, traceback.format_exc()
             return None
 
 
@@ -253,6 +259,9 @@ class StackTachNotifier(WebServiceNotifier):
     def exec_time(self, value, label):
         """Format execution time."""
 
-        routing_key = label.replace("{%TX_ID%}", str(self.transaction_id))
-        payload = (routing_key, value)
+        routing_key = 'tach'
+        data = dict(event_type=label, value=value, units='ms',
+                    transaction_id=self.transaction_id,
+                    _context_timestamp=str(datetime.datetime.utcnow()))
+        payload = (routing_key, data)
         return json.dumps(payload)
