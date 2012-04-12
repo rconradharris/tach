@@ -246,10 +246,6 @@ class WebServiceNotifier(BaseNotifier):
             response = urllib2.urlopen(req)
             return response.read()
         except Exception, e:
-            with open("stacktach_notifier.log", "w+") as log:
-                print >>log, "--------"
-                print >>log, e
-                print >>log, traceback.format_exc()
             return None
 
 
