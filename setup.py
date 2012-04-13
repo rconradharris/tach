@@ -9,7 +9,7 @@ def read(fname):
 
 setup(
     name='tach',
-    version='0.1',
+    version='0.2.0',
     author='Matthew Dietz',
     author_email='matthew.dietz@gmail.com',
     description=(""),
@@ -22,7 +22,7 @@ setup(
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Python :: 2.6'
     ],
-    url='https://github.com/Cerberus98/tach',
+    url='https://github.com/ohthree/tach',
     scripts=['bin/tach'],
     long_description=read('README.md'),
     install_requires=[''],
