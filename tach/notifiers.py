@@ -1,6 +1,11 @@
+import datetime
 import logging
+import json
 import socket
 import time
+import traceback
+import urllib
+import urllib2
 
 from tach import utils
 
@@ -16,8 +21,14 @@ class BaseNotifier(object):
 
         Saves the configuration for later use.
         """
-
+        super(BaseNotifier, self).__init__()
         self.config = config
+        self.transaction_id = 1
+
+    def bump_transaction_id(self):
+        """Bump the transaction ID. Any metrics that use this notifier
+        can bundle messages under a single transaction ID."""
+        self.transaction_id += 1
 
     def format(self, value, vtype, label):
         """Format the value.
@@ -216,3 +227,37 @@ class StatsDNotifier(SocketNotifier):
         """Format increment/decrement."""
 
         return "%s:%s|c" % (label, value)
+
+
+class WebServiceNotifier(BaseNotifier):
+    """Base class for notifiers that talk to web services."""
+
+    def __init__(self, config):
+        """Initialize the urllib2 connection."""
+
+        super(WebServiceNotifier, self).__init__(config)
+        self.url = config['url']
+
+    def send(self, body):
+        try:
+            payload = dict(args=body)
+            cooked_data = urllib.urlencode(payload)
+            req = urllib2.Request(self.url, cooked_data)
+            response = urllib2.urlopen(req)
+            return response.read()
+        except Exception, e:
+            return None
+
+
+class StackTachNotifier(WebServiceNotifier):
+    """Talk to the StackTach web service."""
+
+    def exec_time(self, value, label):
+        """Format execution time."""
+
+        routing_key = 'tach'
+        data = dict(event_type=label, value=value, units='ms',
+                    transaction_id=self.transaction_id,
+                    _context_timestamp=str(datetime.datetime.utcnow()))
+        payload = (routing_key, data)
+        return json.dumps(payload)

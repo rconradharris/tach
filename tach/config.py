@@ -187,12 +187,18 @@ class Method(object):
         self.config = config
         self.label = label
         self._app_cache = None
+        self._post_app_cache = None
         self._metric_cache = None
         self._app_helper = kwargs.get('app_helper')
 
         # Other important configuration values
         required = set(['module', 'method', 'metric'])
-        attrs = set(['notifier', 'app']) | required
+        attrs = set(['notifier', 'app', 'post_app']) | required
+
+        # if there's a global helper set, we don't require a local one
+        if not self._app_helper:
+            attrs.add('app_helper')
+
         for attr in attrs:
             setattr(self, '_' + attr, None)
         self.additional = {}
@@ -217,13 +223,14 @@ class Method(object):
         # Grab the method we're operating on
         method_cls = utils.import_class_or_module(self._module)
         if inspect.ismodule(method_cls):
-            method = raw_method = getattr(method_cls, self._method)
+            that_method = raw_method = getattr(method_cls, self._method)
             kind = 'function'
         else:
-            method, raw_method, kind = _get_method(method_cls, self._method)
-        self._method_cache = method
+            that_method, raw_method, kind = _get_method(method_cls,
+                                                        self._method)
+        self._method_cache = that_method
 
-        # We need to wrap the replacement if its a static or class
+        # We need to wrap the replacement if it's a static or class
         # method
         if kind == 'static method':
             meth_wrap = staticmethod
@@ -233,7 +240,7 @@ class Method(object):
             meth_wrap = lambda f: f
 
         # Wrap the method to perform statistics collection
-        @functools.wraps(method)
+        @functools.wraps(that_method)
         def wrapper(*args, **kwargs):
             # Deal with class method calling conventions
             if kind == 'class method':
@@ -246,15 +253,22 @@ class Method(object):
 
             # Run the method, bracketing with statistics collection
             # and notification
+            if self.metric.bump_transaction_id:
+                self.notifier.bump_transaction_id()
             value = self.metric.start()
-            result = method(*args, **kwargs)
+            result = that_method(*args, **kwargs)
+
+            if self._post_app:
+                result, label = self.post_app(result, *args, **kwargs)
+
             self.notifier(self.metric(value), self.metric.vtype,
                           label or self.label)
 
             return result
+
         # Save some introspecting data
         wrapper.tach_descriptor = self
-        wrapper.tach_function = method
+        wrapper.tach_function = that_method
 
         # Save what we need
         self._method_cls = method_cls
@@ -262,6 +276,9 @@ class Method(object):
         self._method_orig = raw_method
 
         setattr(self._method_cls, self._method, self._method_wrapper)
+
+    def detach(self):
+        setattr(self._method_cls, self._method, self._method_orig)
 
     def __getitem__(self, key):
         """Allow access to additional configuration."""
@@ -275,8 +292,23 @@ class Method(object):
         return self._method_cache
 
     @property
+    def post_app(self):
+        """Return the application transformer."""
+
+        # Don't crash if we don't have an app set
+        if not self._post_app or not self._app_helper:
+            return None
+
+        if not self._post_app_cache:
+            app_cls = utils.import_class_or_module(self._app_helper)
+            self._post_app_cache = getattr(app_cls, self._post_app)
+
+        return self._post_app_cache
+
+    @property
     def app(self):
         """Return the application transformer."""
+
         # Don't crash if we don't have an app set
         if not self._app or not self._app_helper:
             return None

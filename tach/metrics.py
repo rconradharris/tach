@@ -20,9 +20,12 @@ class Metric(object):
 
     def __init__(self, config):
         """Initialize the metric from the configuration."""
+        self._bump_transaction_id = int(
+                                    config.get('bump_transaction_id', 0)) > 0
 
-        # By default, do nothing
-        pass
+    @property
+    def bump_transaction_id(self):
+        return self._bump_transaction_id
 
     def start(self):
         """Start collecting the metric."""
@@ -40,6 +43,7 @@ class DebugMetric(Metric):
 
     def __init__(self, config):
         """Initialize the metric from the configuration."""
+        super(DebugMetric, self).__init__(config)
 
         # First, figure out the real metric
         self.metric_name = config['real_metric']
@@ -101,7 +105,7 @@ class Increment(Metric):
 
     def __init__(self, config):
         """Initialize the metric from the configuration."""
-
+        super(Increment, self).__init__(config)
         self.increment = int(config.get('increment', 1))
 
     def __call__(self, value):
